@@ -63,76 +63,76 @@ shopt -s expand_aliases
 bcftools_d() {
     docker run --rm -e LOCAL_USER_ID=$(id -u $USER) \
     -v ${PWD}:/data -v /seq/refgenomes:/refgenomes:ro \
-    swiftbiosciences/sarscov2:latest \
+    swiftbiosci/sarscov2:latest \
     bcftools "$@"
 }
 bedtools_d() {
     docker run --rm -e LOCAL_USER_ID=$(id -u $USER) \
-    -v ${PWD}:/data swiftbiosciences/sarscov2:latest \
+    -v ${PWD}:/data swiftbiosci/sarscov2:latest \
     bedtools "$@"
 }
 bwa_d() {
     docker run --rm -e LOCAL_USER_ID=$(id -u $USER) \
     -v ${PWD}:/data -v /seq/refgenomes:/refgenomes:ro \
-    swiftbiosciences/sarscov2:latest \
+    swiftbiosci/sarscov2:latest \
     bwa mem "$@"
 }
 covplot_d() {
     docker run --rm -e LOCAL_USER_ID=$(id -u $USER) \
-    -v ${PWD}:/data swiftbiosciences/sarscov2:latest \
+    -v ${PWD}:/data swiftbiosci/sarscov2:latest \
     /usr/local/src/plotcov3/plotcov3 "$@"
 }
 fastqc_d() {
     docker run --rm -e LOCAL_USER_ID=$(id -u $USER) \
-    -v ${PWD}:/data swiftbiosciences/sarscov2:latest \
+    -v ${PWD}:/data swiftbiosci/sarscov2:latest \
     /usr/bin/fastqc "$@"
 }
 gatk_d() {
     docker run --rm -e LOCAL_USER_ID=$(id -u $USER) \
     -v ${PWD}:/data -v /seq/refgenomes:/refgenomes:ro \
-    swiftbiosciences/sarscov2:latest \
+    swiftbiosci/sarscov2:latest \
     gatk "$@"
 }
 lofreq_d() {
     docker run --rm -e LOCAL_USER_ID=$(id -u $USER) \
     -v ${PWD}:/data -v /seq/refgenomes:/refgenomes:ro \
-    swiftbiosciences/sarscov2:latest lofreq"$@"
+    swiftbiosci/sarscov2:latest lofreq"$@"
 
 }
 nextclade_d()
 {
     docker run --rm -e LOCAL_USER_ID=$(id -u $USER) \
-        -v ${PWD}:/data swiftbiosciences/sarscov2:latest \
+        -v ${PWD}:/data swiftbiosci/sarscov2:latest \
         nclade "$@"
 }
 picard_d() {
     docker run --rm -e LOCAL_USER_ID=$(id -u $USER) \
     -v ${PWD}:/data -v /seq/refgenomes:/refgenomes:ro \
-    swiftbiosciences/sarscov2:latest \
+    swiftbiosci/sarscov2:latest \
     java -jar /usr/local/src/picard/picard.jar "$@"
 }
 primerclip_d() {
     docker run --rm -e LOCAL_USER_ID=$(id -u $USER) \
-    -v ${PWD}:/data swiftbiosciences/sarscov2:latest \
+    -v ${PWD}:/data swiftbiosci/sarscov2:latest \
     /usr/local/src/primerclip/primerclip "$@"
 }
 samtools_d() {
     docker run --rm -e LOCAL_USER_ID=$(id -u $USER) \
-    -v ${PWD}:/data swiftbiosciences/sarscov2:latest \
+    -v ${PWD}:/data swiftbiosci/sarscov2:latest \
     samtools "$@"
 }
 seqtk_d() {
     docker run --rm -e LOCAL_USER_ID=$(id -u $USER) \
-    -v ${PWD}:/data swiftbiosciences/sarscov2:latest seqtk "$@"
+    -v ${PWD}:/data swiftbiosci/sarscov2:latest seqtk "$@"
 }
 trimmomatic_d() {
     docker run --rm -e LOCAL_USER_ID=$(id -u $USER) \
-    -v ${PWD}:/data swiftbiosciences/sarscov2:latest \
+    -v ${PWD}:/data swiftbiosci/sarscov2:latest \
     /usr/local/bin/trimmomatic "$@"
 }
 xlreport_d() {
     docker run --rm -e LOCAL_USER_ID=$(id -u $USER) \
-    -v ${PWD}:/data swiftbiosciences/sarscov2:latest \
+    -v ${PWD}:/data swiftbiosci/sarscov2:latest \
     /usr/local/src/report_to_excel_v3/report_to_excel_v3 "$@"
 }
 
