@@ -1,6 +1,5 @@
 #!/bin/bash
 # set -eu
-# set -x
 
 # Swift NGS analysis workflow for SARS-CoV-2 amplicon panel
 # S. Sandhu, S. Chaluvadi and J. Irish 20200809
@@ -44,7 +43,7 @@ do
         \?)
             echo "Usage:"
             echo "      ${0}      [masterfile]       Run covmetrics analysis (no variant calling)"
-            echo "      ${0}  -v  [masterfile]       Run variant calling analysis"
+ echo "      ${0}  -v  [masterfile]       Run variant calling analysis"
             echo "      ${0}  -o  [masterfile]       Include primer off-target checking"
             echo "      ${0}  -d  [masterfile]       Downsample reads"
             echo "      ${0}  -s  [masterfile]       Single-End Reads"
@@ -62,78 +61,83 @@ shopt -s expand_aliases
 # export COMPOSE_DIR="/home/irish/docker/compose/sars2analysis"
 bcftools_d() {
     docker run --rm -e LOCAL_USER_ID=$(id -u $USER) \
-    -v ${PWD}:/data -v /seq/refgenomes:/refgenomes:ro \
-    swiftbiosci/sarscov2:latest \
+    -v ${PWD}:/data \
+    swiftbiosci/sarscov2analysis:latest \
     bcftools "$@"
 }
 bedtools_d() {
     docker run --rm -e LOCAL_USER_ID=$(id -u $USER) \
-    -v ${PWD}:/data swiftbiosci/sarscov2:latest \
+    -v ${PWD}:/data swiftbiosci/sarscov2analysis:latest \
     bedtools "$@"
 }
 bwa_d() {
     docker run --rm -e LOCAL_USER_ID=$(id -u $USER) \
-    -v ${PWD}:/data -v /seq/refgenomes:/refgenomes:ro \
-    swiftbiosci/sarscov2:latest \
+    -v ${PWD}:/data  \
+    swiftbiosci/sarscov2analysis:latest \
     bwa mem "$@"
 }
 covplot_d() {
     docker run --rm -e LOCAL_USER_ID=$(id -u $USER) \
-    -v ${PWD}:/data swiftbiosci/sarscov2:latest \
+    -v ${PWD}:/data swiftbiosci/sarscov2analysis:latest \
     /usr/local/src/plotcov3/plotcov3 "$@"
 }
 fastqc_d() {
     docker run --rm -e LOCAL_USER_ID=$(id -u $USER) \
-    -v ${PWD}:/data swiftbiosci/sarscov2:latest \
+    -v ${PWD}:/data swiftbiosci/sarscov2analysis:latest \
     /usr/bin/fastqc "$@"
 }
 gatk_d() {
     docker run --rm -e LOCAL_USER_ID=$(id -u $USER) \
-    -v ${PWD}:/data -v /seq/refgenomes:/refgenomes:ro \
-    swiftbiosci/sarscov2:latest \
+    -v ${PWD}:/data \
+    swiftbiosci/sarscov2analysis:latest \
     gatk "$@"
 }
 lofreq_d() {
     docker run --rm -e LOCAL_USER_ID=$(id -u $USER) \
-    -v ${PWD}:/data -v /seq/refgenomes:/refgenomes:ro \
-    swiftbiosci/sarscov2:latest lofreq"$@"
+    -v ${PWD}:/data  \
+    swiftbiosci/sarscov2analysis:latest lofreq"$@"
 
 }
 nextclade_d()
 {
     docker run --rm -e LOCAL_USER_ID=$(id -u $USER) \
-        -v ${PWD}:/data swiftbiosci/sarscov2:latest \
+        -v ${PWD}:/data swiftbiosci/sarscov2analysis:latest \
         nclade "$@"
 }
 picard_d() {
     docker run --rm -e LOCAL_USER_ID=$(id -u $USER) \
-    -v ${PWD}:/data -v /seq/refgenomes:/refgenomes:ro \
-    swiftbiosci/sarscov2:latest \
+    -v ${PWD}:/data  \
+    swiftbiosci/sarscov2analysis:latest \
     java -jar /usr/local/src/picard/picard.jar "$@"
 }
 primerclip_d() {
     docker run --rm -e LOCAL_USER_ID=$(id -u $USER) \
-    -v ${PWD}:/data swiftbiosci/sarscov2:latest \
+    -v ${PWD}:/data swiftbiosci/sarscov2analysis:latest \
     /usr/local/src/primerclip/primerclip "$@"
 }
 samtools_d() {
     docker run --rm -e LOCAL_USER_ID=$(id -u $USER) \
-    -v ${PWD}:/data swiftbiosci/sarscov2:latest \
+    -v ${PWD}:/data swiftbiosci/sarscov2analysis:latest \
     samtools "$@"
 }
 seqtk_d() {
     docker run --rm -e LOCAL_USER_ID=$(id -u $USER) \
-    -v ${PWD}:/data swiftbiosci/sarscov2:latest seqtk "$@"
+    -v ${PWD}:/data swiftbiosci/sarscov2analysis:latest seqtk "$@"
 }
 trimmomatic_d() {
     docker run --rm -e LOCAL_USER_ID=$(id -u $USER) \
-    -v ${PWD}:/data swiftbiosci/sarscov2:latest \
+    -v ${PWD}:/data swiftbiosci/sarscov2analysis:latest \
     /usr/local/bin/trimmomatic "$@"
 }
 xlreport_d() {
     docker run --rm -e LOCAL_USER_ID=$(id -u $USER) \
-    -v ${PWD}:/data swiftbiosci/sarscov2:latest \
+    -v ${PWD}:/data swiftbiosci/sarscov2analysis:latest \
     /usr/local/src/report_to_excel_v3/report_to_excel_v3 "$@"
+}
+bgzip_d() {
+    docker run --rm -e LOCAL_USER_ID=$(id -u $USER) \
+    -v ${PWD}:/data swiftbiosci/sarscov2analysis:latest \
+    bgzip "$@"
 }
 
 # args specified on command line when calling script:
@@ -623,7 +627,7 @@ do
         else
             cp "${prefix}"_filt.vcf "${prefix}"_tmp.vcf
         fi
-        bgzip "${prefix}"_tmp.vcf
+        bgzip_d "${prefix}"_tmp.vcf
         bcftools_d index "/data/${prefix}_tmp.vcf.gz"
         bcftools_d consensus -m "/data/${prefix}_ltmincov.bed" \
             -f $ref "/data/${prefix}_tmp.vcf.gz" \
