@@ -13,7 +13,7 @@ downsample="0"
 singleEndReads="0"
 metrics="1" # run metrics-only in absence of -v option
 
-mincov="5" # minimum coverage for calling a base in consensus (N-masked if below $mincov)
+mincov="100" # minimum coverage for calling a base in consensus (N-masked if below $mincov)
 ploidy="2" # test ploidy option in HaplotypeCaller
 
 # parse command line arguments
@@ -43,7 +43,7 @@ do
         \?)
             echo "Usage:"
             echo "      ${0}      [masterfile]       Run covmetrics analysis (no variant calling)"
- echo "      ${0}  -v  [masterfile]       Run variant calling analysis"
+            echo "      ${0}  -v  [masterfile]       Run variant calling analysis"
             echo "      ${0}  -o  [masterfile]       Include primer off-target checking"
             echo "      ${0}  -d  [masterfile]       Downsample reads"
             echo "      ${0}  -s  [masterfile]       Single-End Reads"
@@ -139,13 +139,26 @@ bgzip_d() {
     -v ${PWD}:/data swiftbiosci/sarscov2analysis:latest \
     bgzip "$@"
 }
+pangolin_d() {
+   docker run --rm -e LOCAL_USER_ID=$(id -u $USER) \
+   -v ${PWD}:/data swiftbiosci/sarscov2analysis:latest \
+   bash -c "sudo chown -R ampuser:ampuser /usr/local/src/pangolin/.pyenv/shims && \
+   source /usr/local/src/pangolin/.bashrc && pyenv activate miniconda3-4.7.12/envs/pangolin \
+   && pangolin $1 $2 $3 $4 $5 $6 $7 $8 $9"
+}
+#pangolin_d() {
+#    docker run --rm -e LOCAL_USER_ID=$(id -u $USER) \
+#    -v ${PWD}:/data swiftbiosci/sarscov2analysis:latest \
+#    /usr/local/bin/pangolin "$@"
+# bash -c "source /usr/local/src/pangolin/.bashrc && pyenv activate miniconda3-4.7.12/envs/pangolin && pangolin $@"
+#}
 
 # args specified on command line when calling script:
 coremaster="$1"
 maxreads="${2:-20000000}"
-ref="/refgenomes/covid19.fasta"
-#hybridref="/refgenomes/sarscov2_homosapiens_assembly19broad_hybrid.fasta"
-hg37ref="/refgenomes/Homo_sapiens_assembly19broad.fasta"
+ref="/rgenomes/covid19.fasta"
+#hybridref="/rgenomes/sarscov2_homosapiens_assembly19broad_hybrid.fasta"
+hg37ref="/rgenomes/Homo_sapiens_assembly19broad.fasta"
 
 # start organization
 rundirnameroot="$(echo "${coremaster}" | tr '_' '\t' | awk '{print $1}')"
@@ -160,10 +173,10 @@ mv ../"${coremaster}" .
 # mv ../"${ref%%.fasta}".dict .
 
 # start organization
-mkdir -p tmp fastq fastqc bed bam metrics logs plots ref
+mkdir -p tmp fastq fastqc bed bam metrics logs plots pangolin
 
 # common paths and script-specific aliases
-# ref=/rseq/refgenomes/Homo_sapiens_assembly19broad.fasta
+# ref=/rseq/rgenomes/Homo_sapiens_assembly19broad.fasta
 #anno=/tools/snpEff
 
 ######*** code to generate BED files from master files ./***######
@@ -470,7 +483,7 @@ do
 
     echo "sorting and adding read groups"
     picard_d AddOrReplaceReadGroups \
-        I=/data/"${prefix}"_ptrimd.sam O=/data/"${prefix}"_RG_b37.bam \
+        I=/data/"${prefix}"_ptrimd.sam O=/data/"${prefix}"_RG_sarscov2.bam \
         SO=coordinate RGID=snpID LB=swift SM=/data"${prefix}" PL=illumina PU=miseq \
         VALIDATION_STRINGENCY=LENIENT \
         > "${prefix}"_04_addRGs.log
@@ -489,13 +502,13 @@ do
         > "${prefix}"_05_makenonptrimdbam_index.log
 
     echo "indexing bam file"
-    samtools_d index /data/"${prefix}"_RG_b37.bam \
+    samtools_d index /data/"${prefix}"_RG_sarscov2.bam \
         > "${prefix}"_06_index.log
 
     ### calculate coverage metrics ###
     echo "calculating coverage metrics"
     bedtools_d coverage \
-        -b /data/"${prefix}"_RG_b37.bam -a /data/"$bedfile" -d > "${prefix}".covd
+        -b /data/"${prefix}"_RG_sarscov2.bam -a /data/"$bedfile" -d > "${prefix}".covd
     awk '{sum+=$7}END{m=(sum/NR); b=m*0.2; c=m*0.05; print m, b, c}' \
         "${prefix}".covd \
         > "${prefix}"_covd.tmp 2> "${prefix}"_06_cov1.log
@@ -505,7 +518,7 @@ do
     #       for overlapping regions!
     # UPDATE 190520 remove -d option to get amplicon coverage as sum of alns
     # covering any part of amplicon target region (per amplicon)
-    bedtools_d coverage -b /data/"${prefix}"_RG_b37.bam -a /data/"$nomergebed" |
+    bedtools_d coverage -b /data/"${prefix}"_RG_sarscov2.bam -a /data/"$nomergebed" |
         sort -k1,1n -k2,2n \
         > "${prefix}"_amplicon_coverage.cov 2> "${prefix}"_07_cov2.log
 
@@ -516,7 +529,7 @@ do
 
     # make an amplicon-specific coverage metrics report with olaps omitted
     # and report mean amplicon coverage using bedtool option (170228 JCI)
-    bedtools_d coverage -b /data/"${prefix}"_RG_b37.bam \
+    bedtools_d coverage -b /data/"${prefix}"_RG_sarscov2.bam \
         -a /data/"$olapfreebed" -d \
         > "${prefix}"_olapfree.covd 2> "${prefix}"_08_cov3.log
 
@@ -550,7 +563,7 @@ do
 
     ### NOTE: 170410 should we use amplicon coords for _fullintervals? ###
     # make intervals file for CollectTargetedPcrMetrics
-    samtools_d view -H /data/"${prefix}"_RG_b37.bam \
+    samtools_d view -H /data/"${prefix}"_RG_sarscov2.bam \
         -o "${prefix}"_header.txt
 
     cat "${prefix}"_header.txt "${ampbed}" > "${prefix}"_fullintervals
@@ -560,7 +573,7 @@ do
     # find on-target metrics using picard-tools
     echo "Running CollectTargetedPcrMetrics"
     picard_d CollectTargetedPcrMetrics \
-        I="${prefix}"_RG_b37.bam \
+        I="${prefix}"_RG_sarscov2.bam \
         O="${prefix}"_targetPCRmetrics.txt AI=/data/"${prefix}"_fullintervals \
         TI="${prefix}"_noprimerintervals R="$ref" \
         PER_TARGET_COVERAGE="${prefix}"_perTargetCov.txt \
@@ -598,7 +611,7 @@ do
         echo "Starting variant calling with GATK"
         # NOTE: gatk4
         gatk_d HaplotypeCaller -R "$ref" \
-            -I /data/"${prefix}"_RG_b37.bam -L /data/"$bedfile" -O /data/"${prefix}"_gatkHC.vcf \
+            -I /data/"${prefix}"_RG_sarscov2.bam -L /data/"$bedfile" -O /data/"${prefix}"_gatkHC.vcf \
             --dont-use-soft-clipped-bases -ploidy $ploidy
 
         # Select variants with min-depth >= $mincov and allele-fraction >= 0.9
@@ -608,7 +621,7 @@ do
             #--java-options '-DGATK_STACKTRACE_ON_USER_EXCEPTION=true'
 
         echo "Calculating regions with coverage below ${mincov}X for N-masking consensus"
-        bedtools_d genomecov -bga -ibam /data/"${prefix}"_RG_b37.bam -g "$ref" \
+        bedtools_d genomecov -bga -ibam /data/"${prefix}"_RG_sarscov2.bam -g "$ref" \
             > "${prefix}"_gencov.bdg \
             2> "${prefix}"_gencov.log
 
@@ -627,15 +640,22 @@ do
         else
             cp "${prefix}"_filt.vcf "${prefix}"_tmp.vcf
         fi
-        bgzip_d "${prefix}"_tmp.vcf
-        bcftools_d index "/data/${prefix}_tmp.vcf.gz"
+        bgzip_d "${prefix}"_gatkHC.vcf
+        # bgzip_d "${prefix}"_tmp.vcf
+        bcftools_d index "/data/${prefix}_gatkHC.vcf.gz"
         bcftools_d consensus -m "/data/${prefix}_ltmincov.bed" \
-            -f $ref "/data/${prefix}_tmp.vcf.gz" \
+            -f $ref "/data/${prefix}_gatkHC.vcf.gz" \
             > "${prefix}"_consensus.fa
 
         echo "Running Nextclade on consensus FASTA"
         nextclade_d --input-fasta "/data/${prefix}_consensus.fa" \
             --output-tsv "/data/${prefix}_nextclade_results.tsv"
+
+        echo "Running pangolin on consesnsus FASTA"
+        pangolin_d "/data/${prefix}_consensus.fa" \
+            --verbose -o ./pangolin/global_lineage_results --outfile "/data/${prefix}_pangolin_consensus.csv --panGUIlin 2> pangolin_verbose.log"
+        echo "Processing global lineage information"
+        mv ./pangolin/global_lineage_results/global_lineage_information.csv ./pangolin/global_lineage_results/${prefix}_pangolin_global_lineage_information.csv
     fi
 done
 
@@ -739,6 +759,7 @@ then
     mv ./*.idx vcf
     mv *.bdg metrics
     mv *.tsv nextclade
+    mv *.csv pangolin
     mv *consensus.fa consensus
     mv *.vcf.gz* vcf
 fi
