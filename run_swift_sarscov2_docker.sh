@@ -17,7 +17,7 @@ mincov="100" # minimum coverage for calling a base in consensus (N-masked if bel
 ploidy="2" # test ploidy option in HaplotypeCaller
 
 # parse command line arguments
-while getopts ":mvodsp" opt
+while getopts ":mvodspa" opt
 do
     case "${opt}" in
         h)
@@ -40,6 +40,9 @@ do
             singleEndReads="1" # 200520
             echo "Single-End reads (one Fastq file per library)"
         ;;
+        a)  printversions="1"
+            echo "Print all Tool versions for Swift NGS analysis SARS-CoV-2"
+        ;;
         \?)
             echo "Usage:"
             echo "      ${0}      [masterfile]       Run covmetrics analysis (no variant calling)"
@@ -47,6 +50,8 @@ do
             echo "      ${0}  -o  [masterfile]       Include primer off-target checking"
             echo "      ${0}  -d  [masterfile]       Downsample reads"
             echo "      ${0}  -s  [masterfile]       Single-End Reads"
+            echo "      ${0}  -a                     Print tool versions of docker image"
+            exit
         ;;
     esac
 done
@@ -95,7 +100,7 @@ gatk_d() {
 lofreq_d() {
     docker run --rm -e LOCAL_USER_ID=$(id -u $USER) \
     -v ${PWD}:/data  \
-    swiftbiosci/sarscov2analysis:latest lofreq"$@"
+    swiftbiosci/sarscov2analysis:latest lofreq "$@"
 
 }
 nextclade_d()
@@ -140,18 +145,54 @@ bgzip_d() {
     bgzip "$@"
 }
 pangolin_d() {
-   docker run --rm -e LOCAL_USER_ID=$(id -u $USER) \
-   -v ${PWD}:/data swiftbiosci/sarscov2analysis:latest \
-   bash -c "sudo chown -R ampuser:ampuser /usr/local/src/pangolin/.pyenv/shims && \
-   source /usr/local/src/pangolin/.bashrc && pyenv activate miniconda3-4.7.12/envs/pangolin \
-   && pangolin $1 $2 $3 $4 $5 $6 $7 $8 $9"
+    docker run --rm -e LOCAL_USER_ID=$(id -u $USER) \
+    -v ${PWD}:/data swiftbiosci/sarscov2analysis:latest \
+    bash -c "sudo chown -R ampuser:ampuser /usr/local/src/pangolin/.pyenv/shims && \
+    source /usr/local/src/pangolin/.bashrc && pyenv activate miniconda3-4.7.12/envs/pangolin \
+    && pangolin ""$@"" "
 }
-#pangolin_d() {
+# pangolin_d() {
 #    docker run --rm -e LOCAL_USER_ID=$(id -u $USER) \
 #    -v ${PWD}:/data swiftbiosci/sarscov2analysis:latest \
-#    /usr/local/bin/pangolin "$@"
-# bash -c "source /usr/local/src/pangolin/.bashrc && pyenv activate miniconda3-4.7.12/envs/pangolin && pangolin $@"
-#}
+#    bash -c "sudo chown -R ampuser:ampuser /usr/local/src/pangolin/.pyenv/shims && \
+#    source /usr/local/src/pangolin/.bashrc && pyenv activate miniconda3-4.7.12/envs/pangolin \
+#    && pangolin $1 $2 $3 $4 $5 $6 $7 $8 $9"
+# }
+
+if [ "$printversions" = "1" ]
+    then
+        echo -e "bcftools version information: "
+        docker run --rm -e LOCAL_USER_ID=$(id -u $USER) -v ${PWD}:/data swiftbiosci/sarscov2analysis:latest bcftools --version | grep -E '^bcftools'
+        echo -e "bedtools version information: "
+        bedtools_d --version
+        echo -e "bwa version information: "
+        docker run -it --rm -e LOCAL_USER_ID=$(id -u $USER) -v ${PWD}:/data swiftbiosci/sarscov2analysis:latest bwa | grep -E 'Version'
+        echo -e "Plotcov version information: 3.0.0 "
+        echo -e "fastqc version information: "
+        fastqc_d --version
+        echo -e "gatk version information: "
+        docker run --rm -e LOCAL_USER_ID=$(id -u $USER) -v ${PWD}:/data swiftbiosci/sarscov2analysis:latest gatk --version | grep -E 'The'
+        echo -e "picard version information: "
+        docker run -it --rm -e LOCAL_USER_ID=$(id -u $USER) -v ${PWD}:/data swiftbiosci/sarscov2analysis:latest unzip -p /usr/local/src/picard/picard.jar META-INF/MANIFEST.MF
+        echo -e "primerclip version information:"
+        primerclip_d -h
+        echo -e "Nextclade version information:"
+        nextclade_d --version
+        echo -e "samtools version information: "
+        samtools_d --version
+        echo -e "seqtk version information: "
+        seqtk_d
+        echo -e "trimmomatic version information:"
+        trimmomatic_d -version
+        echo -e "xlreport version information: 3.0.0"
+        echo -e "lofreq version information:"
+        lofreq_d version
+        echo -e "nextclade version information:"
+        nextclade_d --version
+        echo -e "Pangolin version information:"
+        pangolin_d -v ; pangolin_d -pv
+        exit
+fi
 
 # args specified on command line when calling script:
 coremaster="$1"
@@ -167,8 +208,10 @@ rundir="${rundirnameroot}"_"${runstart}"
 
 mkdir -p "${rundir}"
 cd "${rundir}"
-mv ../*.fastq.gz .
-mv ../"${coremaster}" .
+cp ../*.fastq.gz .
+cp ../"${coremaster}" .
+# mv ../*.fastq.gz .
+# mv ../"${coremaster}" .
 # mv ../"${ref}"* .
 # mv ../"${ref%%.fasta}".dict .
 
@@ -232,8 +275,6 @@ for f in core*targets.bed
 do
     awk '{print $1,$2,$3,"+",$4}' OFS="\t" "$f" > "${f%%.bed}_5col.bed"
 done
-
-
 
 # variables to make changes easier
 bedfile=core_merged_targets_5col.bed
@@ -483,7 +524,7 @@ do
 
     echo "sorting and adding read groups"
     picard_d AddOrReplaceReadGroups \
-        I=/data/"${prefix}"_ptrimd.sam O=/data/"${prefix}"_RG_sarscov2.bam \
+        I=/data/"${prefix}"_ptrimd.sam O=/data/"${prefix}"_sarscov2.bam \
         SO=coordinate RGID=snpID LB=swift SM=/data"${prefix}" PL=illumina PU=miseq \
         VALIDATION_STRINGENCY=LENIENT \
         > "${prefix}"_04_addRGs.log
@@ -502,13 +543,13 @@ do
         > "${prefix}"_05_makenonptrimdbam_index.log
 
     echo "indexing bam file"
-    samtools_d index /data/"${prefix}"_RG_sarscov2.bam \
+    samtools_d index /data/"${prefix}"_sarscov2.bam \
         > "${prefix}"_06_index.log
 
     ### calculate coverage metrics ###
     echo "calculating coverage metrics"
     bedtools_d coverage \
-        -b /data/"${prefix}"_RG_sarscov2.bam -a /data/"$bedfile" -d > "${prefix}".covd
+        -b /data/"${prefix}"_sarscov2.bam -a /data/"$bedfile" -d > "${prefix}".covd
     awk '{sum+=$7}END{m=(sum/NR); b=m*0.2; c=m*0.05; print m, b, c}' \
         "${prefix}".covd \
         > "${prefix}"_covd.tmp 2> "${prefix}"_06_cov1.log
@@ -518,7 +559,7 @@ do
     #       for overlapping regions!
     # UPDATE 190520 remove -d option to get amplicon coverage as sum of alns
     # covering any part of amplicon target region (per amplicon)
-    bedtools_d coverage -b /data/"${prefix}"_RG_sarscov2.bam -a /data/"$nomergebed" |
+    bedtools_d coverage -b /data/"${prefix}"_sarscov2.bam -a /data/"$nomergebed" |
         sort -k1,1n -k2,2n \
         > "${prefix}"_amplicon_coverage.cov 2> "${prefix}"_07_cov2.log
 
@@ -529,7 +570,7 @@ do
 
     # make an amplicon-specific coverage metrics report with olaps omitted
     # and report mean amplicon coverage using bedtool option (170228 JCI)
-    bedtools_d coverage -b /data/"${prefix}"_RG_sarscov2.bam \
+    bedtools_d coverage -b /data/"${prefix}"_sarscov2.bam \
         -a /data/"$olapfreebed" -d \
         > "${prefix}"_olapfree.covd 2> "${prefix}"_08_cov3.log
 
@@ -563,7 +604,7 @@ do
 
     ### NOTE: 170410 should we use amplicon coords for _fullintervals? ###
     # make intervals file for CollectTargetedPcrMetrics
-    samtools_d view -H /data/"${prefix}"_RG_sarscov2.bam \
+    samtools_d view -H /data/"${prefix}"_sarscov2.bam \
         -o "${prefix}"_header.txt
 
     cat "${prefix}"_header.txt "${ampbed}" > "${prefix}"_fullintervals
@@ -573,7 +614,7 @@ do
     # find on-target metrics using picard-tools
     echo "Running CollectTargetedPcrMetrics"
     picard_d CollectTargetedPcrMetrics \
-        I="${prefix}"_RG_sarscov2.bam \
+        I="${prefix}"_sarscov2.bam \
         O="${prefix}"_targetPCRmetrics.txt AI=/data/"${prefix}"_fullintervals \
         TI="${prefix}"_noprimerintervals R="$ref" \
         PER_TARGET_COVERAGE="${prefix}"_perTargetCov.txt \
@@ -581,7 +622,7 @@ do
         &> "${prefix}"_09_pcrmetrics.log
 
     # 200509 check metrics on non-trimmed bam for comparison
-    echo "Running CollectTargetedPcrMetrics"
+    echo "Running CollectTargetedPcrMetrics for non-trimmed sequences"
     picard_d CollectTargetedPcrMetrics \
         I="${prefix}"_nontrimd.bam \
         O="${prefix}"_targetPCRmetrics_noptrim.txt AI=/data/"${prefix}"_fullintervals \
@@ -611,7 +652,7 @@ do
         echo "Starting variant calling with GATK"
         # NOTE: gatk4
         gatk_d HaplotypeCaller -R "$ref" \
-            -I /data/"${prefix}"_RG_sarscov2.bam -L /data/"$bedfile" -O /data/"${prefix}"_gatkHC.vcf \
+            -I /data/"${prefix}"_sarscov2.bam -L /data/"$bedfile" -O /data/"${prefix}"_gatkHC.vcf \
             --dont-use-soft-clipped-bases -ploidy $ploidy
 
         # Select variants with min-depth >= $mincov and allele-fraction >= 0.9
@@ -621,7 +662,7 @@ do
             #--java-options '-DGATK_STACKTRACE_ON_USER_EXCEPTION=true'
 
         echo "Calculating regions with coverage below ${mincov}X for N-masking consensus"
-        bedtools_d genomecov -bga -ibam /data/"${prefix}"_RG_sarscov2.bam -g "$ref" \
+        bedtools_d genomecov -bga -ibam /data/"${prefix}"_sarscov2.bam -g "$ref" \
             > "${prefix}"_gencov.bdg \
             2> "${prefix}"_gencov.log
 
@@ -634,11 +675,15 @@ do
         echo "Call count in filtered VCF: $callcnt"
         if [[ $callcnt -eq 0 ]]
         then
-            cat "${prefix}"_filt.vcf \
-                <(echo "NC_045512.2 25 FAKECALL T T 2000.00 . AC=1;AF=1.00;AN=1;DP=100;ExcessHet=0.0;FS=0.000;MLEAC=1;MLEAF=1.00;MQ=60.00;QD=30.00;SOR=2.000 GT:AD:DP:GQ:PL 0/0:100,100:100:99:0,1000" | tr ' ' '\t') \
             > "${prefix}"_tmp.vcf
         else
             cp "${prefix}"_filt.vcf "${prefix}"_tmp.vcf
+        # then
+        #     cat "${prefix}"_filt.vcf \
+        #         <(echo "NC_045512.2 25 FAKECALL T T 2000.00 . AC=1;AF=1.00;AN=1;DP=100;ExcessHet=0.0;FS=0.000;MLEAC=1;MLEAF=1.00;MQ=60.00;QD=30.00;SOR=2.000 GT:AD:DP:GQ:PL 0/0:100,100:100:99:0,1000" | tr ' ' '\t') \
+        #     > "${prefix}"_tmp.vcf
+        # else
+        #     cp "${prefix}"_filt.vcf "${prefix}"_tmp.vcf
         fi
         bgzip_d "${prefix}"_gatkHC.vcf
         # bgzip_d "${prefix}"_tmp.vcf
@@ -647,15 +692,19 @@ do
             -f $ref "/data/${prefix}_gatkHC.vcf.gz" \
             > "${prefix}"_consensus.fa
 
-        echo "Running Nextclade on consensus FASTA"
+        echo "Running nextclade on consensus FASTA"
         nextclade_d --input-fasta "/data/${prefix}_consensus.fa" \
             --output-tsv "/data/${prefix}_nextclade_results.tsv"
 
-        echo "Running pangolin on consesnsus FASTA"
-        pangolin_d "/data/${prefix}_consensus.fa" \
-            --verbose -o ./pangolin/global_lineage_results --outfile "/data/${prefix}_pangolin_consensus.csv --panGUIlin 2> pangolin_verbose.log"
-        echo "Processing global lineage information"
-        mv ./pangolin/global_lineage_results/global_lineage_information.csv ./pangolin/global_lineage_results/${prefix}_pangolin_global_lineage_information.csv
+# F.C & Sandhu 210220
+       echo "Running pangolin on consesnsus FASTA"
+       pangolin_d "/data/${prefix}_consensus.fa --verbose -o pangolin/global_lineage_results --outfile /data/${prefix}_pangolin_consensus.csv --panGUIlin" 2> pangolin_verbose.log
+
+       # echo "Running pangolin on consensus FASTA"
+       # pangolin_d "/data/${prefix}_consensus.fa --panGUIlin --outdir /data/pangolin --outfile ${prefix}_pangolin_consensus.csv --verbose"
+       # echo "Organizing global lineage file information!"
+       # mv ./pangolin/global_lineage_information.csv ./pangolin/${prefix}_global_lineage_information.csv
+       # rm -rf ./pangolin/logs
     fi
 done
 
@@ -663,7 +712,7 @@ done
 for f in ./*targetPCRmetrics.txt
 do
     fname=$(basename $f)
-    awk -v n="${fname%%_L001*}" 'NR==8{print n,$16,$20,$26*100.0,$41*100.0}' \
+    awk -v n="${fname%%_R1*}" 'NR==8{print n,$16,$20,$26*100.0,$41*100.0}' \
         OFS="\t" "$f" > "${f%%.txt}"_summary.txt
     f2="${f%%_target*}"_covMetrics.txt
     paste "${f%%.txt}"_summary.txt "$f2" > "${f2%%_cov*}"_combined_cov_metrics.txt
@@ -676,7 +725,7 @@ done
 for f in ./*alnmetrics.txt
 do
     fname=$(basename $f)
-    sname=${fname%%_L001*}
+    sname=${fname%%_R1*}
     totreads=$(awk '{print $2}' "${f%%_s2nomap*}"_targetPCRmetrics_summary.txt)
     awk -v fnm="$sname" -v trds="$totreads" \
         'NR==10{print fnm,trds,$6,$6/trds*100.0}' OFS="\t" \
@@ -725,32 +774,51 @@ cat <(echo "Sample Total_Reads Reads_Aligned %Reads_Aligned Pct_10X_Cov" \
 xlreport_d --finmets "/data/${rundir}_final_metrics_report.txt"
 mv metrics_report.xlsx "${rundir}"_metrics_report.xlsx
 
-# organize output
-mv *_report.txt metrics
-# mv final_metrics_report2.txt metrics
+# F.C & Sandhu 210225
+echo "Summarizing lineage information from Pangolin"
+echo -e "Sample\tlineage\tprobability\tpangoLEARN_version\tstatus\tnote\ttaxon" > pangoheader.txt
+for f in *csv ; do sed 's/,/\t/g' $f | awk -v fname="${f%_R1*}" 'NR==2 {print fname, $2,$3,$4,$5,$6,$1}' > ${f%.csv}.tmp4; done
+cat pangoheader.txt *tmp4 > pangolin_lineage.tmp
 
-mv ./*.log logs
-mv ./*.bed bed
-mv ./*.ba* bam
-mv ./*.covd metrics
-mv ./*.cov metrics
-mv ./*covMetrics.txt metrics
-mv ./*alnmetrics.txt metrics
-# mv ./*ampcovMetrics.txt metrics
-mv ./*targetPCRmetrics.txt metrics
-mv ./*.fastq.gz fastq
-mv ./*.fq.gz fastq
-mv ./*combined_cov_metrics.txt metrics
-mv ./*combined_ampcov_metrics.txt metrics
-mv ./*PCRmetrics_summary.txt metrics
-mv ./*perTargetCov.txt metrics
-# mv ./*.html fastqc
-mv ./*.tmp tmp # 190102
-mv ./*.tmp2 tmp
-mv ./*.tmp3 tmp
-mv ./*intervals tmp
-mv ./*.txt tmp
-mv ./*.p* plots
+echo "Summarize global lineage PANGOLIN"
+echo -e "LineageName\tMost_common_countries\tDate_Range\tNumberof_taxa\tDays_sinceLast_sampling" > panglobheader.txt
+for f in ./pangolin/global_lineage_results/*csv ; do sed 's/,/\t/g' $f | awk 'NR==2' > ${f%.csv}.tmp5; done
+cat panglobheader.txt pangolin/global_lineage_results/*tmp5 > pangolin_globalin.tmp
+paste pangolin_lineage.tmp pangolin_globalin.tmp > pangolin_lineage_report.txt
+
+echo "Summarizing Nextclade results"
+for g in *tsv
+ do
+     head -n1 $g > nextclad_header.txt
+     awk -v fname="${g%_R1*}" 'NR==2 {print fname, $0}' $g > ${g%.tsv}.tmp5
+done
+
+cat ./nextclad_header.txt *tmp5 > nextclade_Clade_report.txt
+
+# Clean up tmp files and organize output
+
+rm *.tmp
+rm *.tmp[2-5]
+rm *header.txt
+rm *summary.txt
+rm *intervals
+mv ./*.log logs/
+mv ./*.bed bed/
+mv ./*.covd metrics/
+mv ./*.cov metrics/
+mv ./*metrics.txt metrics/
+mv ./*perTargetCov.txt metrics/
+mv ./*.fastq.gz fastq/
+mv ./*.fq.gz fastq/
+mv ./*nontrim* tmp/
+mv ./*s2nomap* tmp/
+mv ./*.txt tmp/
+mv ./*.p* plots/
+mv ./*.ba* bam/
+mv ./tmp/pangolin_lineage_report.txt ./
+mv ./tmp/nextclade_Clade_report.txt ./
+# mv ./tmp/*masterfile.txt ./
+mv *_report.txt metrics
 
 if [ ! "$metrics" = "1" ]
 then
