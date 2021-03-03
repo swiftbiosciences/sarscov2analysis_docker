@@ -813,12 +813,12 @@ mv ./*.fq.gz fastq/
 mv ./*nontrim* tmp/
 mv ./*s2nomap* tmp/
 mv ./*.txt tmp/
+mv ./tmp/"${coremaster}" ./
 mv ./*.p* plots/
 mv ./*.ba* bam/
 mv ./tmp/pangolin_lineage_report.txt ./
 mv ./tmp/nextclade_Clade_report.txt ./
-# mv ./tmp/*masterfile.txt ./
-mv *_report.txt metrics
+mv *_report.txt metrics/
 
 if [ ! "$metrics" = "1" ]
 then
@@ -830,6 +830,8 @@ then
     mv *.csv pangolin
     mv *consensus.fa consensus
     mv *.vcf.gz* vcf
+    mv ./metrics/nextclade_Clade_report.txt ./
+    mv ./metrics/pangolin_lineage_report.txt ./
 fi
 echo "analysis workflow finished."
 echo "Please check out the new plots (.pdf files) and the excel report file (metrics_report.xlsx)"
