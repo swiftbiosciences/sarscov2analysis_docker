@@ -699,6 +699,7 @@ do
 # F.C & Sandhu 210220
        echo "Running pangolin on consesnsus FASTA"
        pangolin_d "/data/${prefix}_consensus.fa --verbose -o pangolin/global_lineage_results --outfile /data/${prefix}_pangolin_consensus.csv --panGUIlin" 2> pangolin_verbose.log
+       mv ./pangolin/global_lineage_results/global_lineage_information.csv ./pangolin/global_lineage_results/${prefix}_global_lineage_information.csv
 
        # echo "Running pangolin on consensus FASTA"
        # pangolin_d "/data/${prefix}_consensus.fa --panGUIlin --outdir /data/pangolin --outfile ${prefix}_pangolin_consensus.csv --verbose"
