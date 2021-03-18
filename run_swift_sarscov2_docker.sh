@@ -1,5 +1,6 @@
 #!/bin/bash
 # set -eu
+# set -x
 
 # Swift NGS analysis workflow for SARS-CoV-2 amplicon panel
 # S. Sandhu, S. Chaluvadi and J. Irish 20200809
@@ -16,47 +17,62 @@ metrics="1" # run metrics-only in absence of -v option
 mincov="100" # minimum coverage for calling a base in consensus (N-masked if below $mincov)
 ploidy="2" # test ploidy option in HaplotypeCaller
 
-# parse command line arguments
-while getopts ":mvodspa" opt
-do
+# Print usage function along command line arguments
+usage()
+{
+cat<<EOF
+Usage: $0 [OPTIONS] masterfile.txt
+OPTIONS:
+ -h Show usage
+ -v Run variant calling workflow (includes metrics)
+ -o Run checks for primer counts in off-target alignments
+ -d Run checks for primer counts in off-target alignments
+ -s Run Single-End reads (one Fastq file per library)
+ -a Print all tool versions for Swift NGS analysis SARS-CoV-2
+EOF
+}
+
+# If no argumenents are supplied by user run usage function
+if [ "$#" -eq 0 ]
+then
+    usage
+    exit 1
+fi
+
+while getopts ":mvodspa" opt; do
     case "${opt}" in
-        h)
-            echo "Usage:"
-            echo "      ${0} [OPTIONS] masterfile.txt /path/to/refgenome.fasta"
-        ;;
-        v)
-            metrics="0"
-            echo "Running variant calling workflow (includes metrics)"
-        ;;
-        o)
-            checkprimerOT="1" # 190107
-            echo "running checks for primer counts in off-target alignments"
-        ;;
-        d)
-            downsample="1" # 190107
-            echo "running checks for primer counts in off-target alignments"
-        ;;
-        s)
-            singleEndReads="1" # 200520
-            echo "Single-End reads (one Fastq file per library)"
-        ;;
-        a)  printversions="1"
-            echo "Print all Tool versions for Swift NGS analysis SARS-CoV-2"
-        ;;
-        \?)
-            echo "Usage:"
-            echo "      ${0}      [masterfile]       Run covmetrics analysis (no variant calling)"
-            echo "      ${0}  -v  [masterfile]       Run variant calling analysis"
-            echo "      ${0}  -o  [masterfile]       Include primer off-target checking"
-            echo "      ${0}  -d  [masterfile]       Downsample reads"
-            echo "      ${0}  -s  [masterfile]       Single-End Reads"
-            echo "      ${0}  -a                     Print tool versions of docker image"
-            exit
-        ;;
+    h)
+      usage
+      exit 1
+      ;;
+    v)
+      metrics="0"
+      echo "Running variant calling workflow (includes metrics)"
+      ;;
+    o)
+      checkprimerOT="1" # 190107
+      echo "running checks for primer counts in off-target alignments"
+      ;;
+    d)
+      downsample="1" # 190107
+      echo "running checks for primer counts in off-target alignments"
+      ;;
+    s)
+      singleEndReads="1" # 200520
+      echo "Single-End reads (one Fastq file per library)"
+      ;;
+    a)
+      printversions="1"
+      echo "Print all Tool versions for Swift NGS analysis SARS-CoV-2"
+      ;;
+    \?)
+      usage
+      exit
+      ;;
     esac
 done
 
-shift $((OPTIND -1))
+shift $((OPTIND-1))
 
 shopt -s expand_aliases
 
@@ -127,7 +143,7 @@ samtools_d() {
 }
 seqtk_d() {
     docker run --rm -e LOCAL_USER_ID=$(id -u $USER) \
-    -v ${PWD}:/data swiftbiosci/sarscov2analysis:latest seqtk "$@"
+    -v ${PWD}:/data swiftbiosci/sarscov2analysis:latest /usr/bin/seqtk "$@"
 }
 trimmomatic_d() {
     docker run --rm -e LOCAL_USER_ID=$(id -u $USER) \
@@ -151,15 +167,8 @@ pangolin_d() {
     source /usr/local/src/pangolin/.bashrc && pyenv activate miniconda3-4.7.12/envs/pangolin \
     && pangolin ""$@"" "
 }
-# pangolin_d() {
-#    docker run --rm -e LOCAL_USER_ID=$(id -u $USER) \
-#    -v ${PWD}:/data swiftbiosci/sarscov2analysis:latest \
-#    bash -c "sudo chown -R ampuser:ampuser /usr/local/src/pangolin/.pyenv/shims && \
-#    source /usr/local/src/pangolin/.bashrc && pyenv activate miniconda3-4.7.12/envs/pangolin \
-#    && pangolin $1 $2 $3 $4 $5 $6 $7 $8 $9"
-# }
 
-if [ "$printversions" = "1" ]
+if [[ "$printversions" -eq 1 ]];
     then
         echo -e "bcftools version information: "
         docker run --rm -e LOCAL_USER_ID=$(id -u $USER) -v ${PWD}:/data swiftbiosci/sarscov2analysis:latest bcftools --version | grep -E '^bcftools'
@@ -181,7 +190,7 @@ if [ "$printversions" = "1" ]
         echo -e "samtools version information: "
         samtools_d --version
         echo -e "seqtk version information: "
-        seqtk_d
+        docker run -it --rm -e LOCAL_USER_ID=$(id -u $USER) -v ${PWD}:/data swiftbiosci/sarscov2analysis:latest seqtk | grep -E 'Version'
         echo -e "trimmomatic version information:"
         trimmomatic_d -version
         echo -e "xlreport version information: 3.0.0"
@@ -191,7 +200,7 @@ if [ "$printversions" = "1" ]
         nextclade_d --version
         echo -e "Pangolin version information:"
         pangolin_d -v ; pangolin_d -pv
-        exit
+        exit 1
 fi
 
 # args specified on command line when calling script:
