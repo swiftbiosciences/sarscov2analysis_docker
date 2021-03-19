@@ -62,8 +62,8 @@ while getopts ":mvodspa" opt; do
       echo "Single-End reads (one Fastq file per library)"
       ;;
     a)
-      printversions="1"
-      echo "Print all Tool versions for Swift NGS analysis SARS-CoV-2"
+ #     printversions="1"
+#      echo "Print all Tool versions for Swift NGS analysis SARS-CoV-2"
       ;;
     \?)
       usage
@@ -167,41 +167,6 @@ pangolin_d() {
     source /usr/local/src/pangolin/.bashrc && pyenv activate miniconda3-4.7.12/envs/pangolin \
     && pangolin ""$@"" "
 }
-
-if [[ "$printversions" -eq 1 ]];
-    then
-        echo -e "bcftools version information: "
-        docker run --rm -e LOCAL_USER_ID=$(id -u $USER) -v ${PWD}:/data swiftbiosci/sarscov2analysis:latest bcftools --version | grep -E '^bcftools'
-        echo -e "bedtools version information: "
-        bedtools_d --version
-        echo -e "bwa version information: "
-        docker run -it --rm -e LOCAL_USER_ID=$(id -u $USER) -v ${PWD}:/data swiftbiosci/sarscov2analysis:latest bwa | grep -E 'Version'
-        echo -e "Plotcov version information: 3.0.0 "
-        echo -e "fastqc version information: "
-        fastqc_d --version
-        echo -e "gatk version information: "
-        docker run --rm -e LOCAL_USER_ID=$(id -u $USER) -v ${PWD}:/data swiftbiosci/sarscov2analysis:latest gatk --version | grep -E 'The'
-        echo -e "picard version information: "
-        docker run -it --rm -e LOCAL_USER_ID=$(id -u $USER) -v ${PWD}:/data swiftbiosci/sarscov2analysis:latest unzip -p /usr/local/src/picard/picard.jar META-INF/MANIFEST.MF
-        echo -e "primerclip version information:"
-        primerclip_d -h
-        echo -e "Nextclade version information:"
-        nextclade_d --version
-        echo -e "samtools version information: "
-        samtools_d --version
-        echo -e "seqtk version information: "
-        docker run -it --rm -e LOCAL_USER_ID=$(id -u $USER) -v ${PWD}:/data swiftbiosci/sarscov2analysis:latest seqtk | grep -E 'Version'
-        echo -e "trimmomatic version information:"
-        trimmomatic_d -version
-        echo -e "xlreport version information: 3.0.0"
-        echo -e "lofreq version information:"
-        lofreq_d version
-        echo -e "nextclade version information:"
-        nextclade_d --version
-        echo -e "Pangolin version information:"
-        pangolin_d -v ; pangolin_d -pv
-        exit 1
-fi
 
 # args specified on command line when calling script:
 coremaster="$1"
@@ -843,5 +808,38 @@ then
     mv ./metrics/nextclade_Clade_report.txt ./
     mv ./metrics/pangolin_lineage_report.txt ./
 fi
+
+echo "Printing all Tool versions for Swift NGS analysis SARS-CoV-2"
+        echo -e "bcftools version information: "
+        docker run --rm -e LOCAL_USER_ID=$(id -u $USER) -v ${PWD}:/data swiftbiosci/sarscov2analysis:latest bcftools --version | grep -E '^bcftools'
+        echo -e "bedtools version information: "
+        bedtools_d --version
+        echo -e "bwa version information: "
+        docker run -it --rm -e LOCAL_USER_ID=$(id -u $USER) -v ${PWD}:/data swiftbiosci/sarscov2analysis:latest bwa | grep -E 'Version'
+        echo -e "Plotcov version information: 3.0.0 "
+        echo -e "fastqc version information: "
+        fastqc_d --version
+        echo -e "gatk version information: "
+        docker run --rm -e LOCAL_USER_ID=$(id -u $USER) -v ${PWD}:/data swiftbiosci/sarscov2analysis:latest gatk --version | grep -E 'The'
+        echo -e "picard version information: "
+        docker run -it --rm -e LOCAL_USER_ID=$(id -u $USER) -v ${PWD}:/data swiftbiosci/sarscov2analysis:latest unzip -p /usr/local/src/picard/picard.jar META-INF/MANIFEST.MF
+        echo -e "primerclip version information:"
+        primerclip_d -h
+        echo -e "Nextclade version information:"
+        nextclade_d --version
+        echo -e "samtools version information: "
+        samtools_d --version
+        echo -e "seqtk version information: "
+        docker run -it --rm -e LOCAL_USER_ID=$(id -u $USER) -v ${PWD}:/data swiftbiosci/sarscov2analysis:latest seqtk | grep -E 'Version'
+        echo -e "trimmomatic version information:"
+        trimmomatic_d -version
+        echo -e "xlreport version information: 3.0.0"
+        echo -e "lofreq version information:"
+        lofreq_d version
+        echo -e "nextclade version information:"
+        nextclade_d --version
+        echo -e "Pangolin version information:"
+        pangolin_d -v ; pangolin_d -pv
+
 echo "analysis workflow finished."
 echo "Please check out the new plots (.pdf files) and the excel report file (metrics_report.xlsx)"
