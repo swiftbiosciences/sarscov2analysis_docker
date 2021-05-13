@@ -752,14 +752,14 @@ mv metrics_report.xlsx "${rundir}"_metrics_report.xlsx
 # F.C & Sandhu 210225
 echo "Summarizing lineage information from Pangolin"
 echo -e "Sample\tlineage\tprobability\tpangoLEARN_version\tstatus\tnote\ttaxon" > pangoheader.txt
-for f in *csv ; do sed 's/,/\t/g' $f | awk -v fname="${f%_R1*}" 'NR==2 {print fname, $2,$3,$4,$5,$6,$1}' > ${f%.csv}.tmp4; done
-cat pangoheader.txt *tmp4 > pangolin_lineage.tmp
+for f in *csv ; do sed 's/,/\t/g' $f | awk -v fname="${f%_pango*}" 'NR==2 {print fname, $2,$3,$4,$5,$6,$1}' > ${f%.csv}.tmp4; done
+cat pangoheader.txt *tmp4 > pangolin_lineage_report.txt
 
-echo "Summarize global lineage PANGOLIN"
-echo -e "LineageName\tMost_common_countries\tDate_Range\tNumberof_taxa\tDays_sinceLast_sampling" > panglobheader.txt
-for f in ./pangolin/global_lineage_results/*csv ; do sed 's/,/\t/g' $f | awk 'NR==2' > ${f%.csv}.tmp5; done
-cat panglobheader.txt pangolin/global_lineage_results/*tmp5 > pangolin_globalin.tmp
-paste pangolin_lineage.tmp pangolin_globalin.tmp > pangolin_lineage_report.txt
+#echo "Summarize global lineage PANGOLIN"
+#echo -e "LineageName\tMost_common_countries\tDate_Range\tNumberof_taxa\tDays_sinceLast_sampling" > panglobheader.txt
+#for f in ./pangolin/global_lineage_results/*csv ; do sed 's/,/\t/g' $f | awk 'NR==2' > ${f%.csv}.tmp5; done
+#cat panglobheader.txt pangolin/global_lineage_results/*tmp5 > pangolin_globalin.tmp
+#paste pangolin_lineage.tmp pangolin_globalin.tmp > pangolin_lineage_report.txt
 
 echo "Summarizing Nextclade results"
 for g in *tsv
