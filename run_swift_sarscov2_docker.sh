@@ -14,7 +14,7 @@ downsample="0"
 singleEndReads="0"
 metrics="1" # run metrics-only in absence of -v option
 
-mincov="100" # minimum coverage for calling a base in consensus (N-masked if below $mincov)
+mincov="10" # minimum coverage for calling a base in consensus (N-masked if below $mincov)
 ploidy="2" # test ploidy option in HaplotypeCaller
 
 # Print usage function along command line arguments
@@ -24,11 +24,11 @@ cat<<EOF
 Usage: $0 [OPTIONS] masterfile.txt
 OPTIONS:
  -h Show usage
- -v Run variant calling workflow (includes metrics)
+ -v Run variant calling workflow (includes metrics and consensus FASTA only)
  -o Run checks for primer counts in off-target alignments
  -d Run checks for primer counts in off-target alignments
  -s Run Single-End reads (one Fastq file per library)
- -a Print all tool versions for Swift NGS analysis SARS-CoV-2
+ -u Run latest version of Pangolin, variant calls, and lineage calls (Requires NAT and port 443 to be open)
 EOF
 }
 
@@ -39,7 +39,7 @@ then
     exit 1
 fi
 
-while getopts ":mvodspa" opt; do
+while getopts ":mvodsua" opt; do
     case "${opt}" in
     h)
       usage
@@ -47,7 +47,7 @@ while getopts ":mvodspa" opt; do
       ;;
     v)
       metrics="0"
-      echo "Running variant calling workflow (includes metrics)"
+      echo "Running variant calling (includes metrics and consensus FASTA only)"
       ;;
     o)
       checkprimerOT="1" # 190107
@@ -61,9 +61,10 @@ while getopts ":mvodspa" opt; do
       singleEndReads="1" # 200520
       echo "Single-End reads (one Fastq file per library)"
       ;;
-    a)
- #     printversions="1"
-#      echo "Print all Tool versions for Swift NGS analysis SARS-CoV-2"
+    u)
+      installandrunpangolin="1"
+      metrics="0"
+      echo "Pipeline will include installing latest version of Pangolin during lineage calling"
       ;;
     \?)
       usage
@@ -160,12 +161,29 @@ bgzip_d() {
     -v ${PWD}:/data swiftbiosci/sarscov2analysis:latest \
     bgzip "$@"
 }
+installconda_d() {
+    docker run --rm -e LOCAL_USER_ID=$(id -u $USER) \
+    -v ${PWD}:/data swiftbiosci/sarscov2analysis:latest \
+    bash -c "/usr/local/src/conda_install/Miniconda3-py38_4.10.3-Linux-x86_64.sh -b -p /data/Miniconda3-py38_4.10.3-Linux-x86_64 && \
+    source /usr/local/src/dot_config/docker_user_bashrc && conda -V"
+}
+getpangolinsrc_d() {
+    docker run --rm -e LOCAL_USER_ID=$(id -u $USER) \
+    -v ${PWD}:/data swiftbiosci/sarscov2analysis:latest \
+    bash -c "source /usr/local/src/dot_config/docker_user_bashrc && git clone https://github.com/cov-lineages/pangolin.git && \
+    conda env create -f ./pangolin/environment.yml"
+}
+ipangolinupdatecheck_d() {
+    docker run --rm -e LOCAL_USER_ID=$(id -u $USER) \
+    -v ${PWD}:/data swiftbiosci/sarscov2analysis:latest \
+    bash -c "source /usr/local/src/dot_config/docker_user_bashrc && \
+    conda activate pangolin && cd ./pangolin && python3 setup.py install && pangolin --update-data"
+}
 pangolin_d() {
     docker run --rm -e LOCAL_USER_ID=$(id -u $USER) \
     -v ${PWD}:/data swiftbiosci/sarscov2analysis:latest \
-    bash -c "sudo chown -R ampuser:ampuser /usr/local/src/pangolin/.pyenv/shims && \
-    source /usr/local/src/pangolin/.bashrc && pyenv activate miniconda3-4.7.12/envs/pangolin \
-    && pangolin ""$@"" "
+    bash -c "source /usr/local/src/dot_config/docker_user_bashrc && \
+    conda activate pangolin && pangolin ""$@"" "
 }
 
 # args specified on command line when calling script:
@@ -182,7 +200,7 @@ rundir="${rundirnameroot}"_"${runstart}"
 
 mkdir -p "${rundir}"
 cd "${rundir}"
-cp ../*.fastq.gz .
+mv ../*.fastq.gz .
 cp ../"${coremaster}" .
 # mv ../*.fastq.gz .
 # mv ../"${coremaster}" .
@@ -190,11 +208,17 @@ cp ../"${coremaster}" .
 # mv ../"${ref%%.fasta}".dict .
 
 # start organization
-mkdir -p tmp fastq fastqc bed bam metrics logs plots pangolin
+
+if [ "$installandrunpangolin" = "1" ]
+then
+    mkdir -p pangolin_output
+fi
+
+mkdir -p tmp fastq fastqc bed bam metrics logs plots
 
 # common paths and script-specific aliases
 # ref=/rseq/rgenomes/Homo_sapiens_assembly19broad.fasta
-#anno=/tools/snpEff
+# anno=/tools/snpEff
 
 ######*** code to generate BED files from master files ./***######
 echo "Creating BED files from masterfile"
@@ -277,6 +301,16 @@ awk '{print $1,$5,$6,$7;print $1,$8,$9,$10}' OFS="\t" totalmaster.tmp \
 ###############################################################################
 ###### begin workflow for each pair of fastq files in working directory #######
 ###############################################################################
+
+if [ "$installandrunpangolin" = "1" ]
+then
+    ###############################################################################
+    # Install latest version of Pangolin to prepare envrionment for lineage calls #
+    ###############################################################################
+    installconda_d
+    getpangolinsrc_d
+    ipangolinupdatecheck_d
+fi
 
 for f in *_R1_001.fastq.gz
 do
@@ -663,23 +697,22 @@ do
         # bgzip_d "${prefix}"_tmp.vcf
         bcftools_d index "/data/${prefix}_gatkHC.vcf.gz"
         bcftools_d consensus -m "/data/${prefix}_ltmincov.bed" \
-            -f $ref "/data/${prefix}_gatkHC.vcf.gz" \
+            -f $ref "/data/${prefix}_gatkHC.vcf.gz" | sed 's/[,]//g' \
             > "${prefix}"_consensus.fa
 
         echo "Running nextclade on consensus FASTA"
         nextclade_d --input-fasta "/data/${prefix}_consensus.fa" \
             --output-tsv "/data/${prefix}_nextclade_results.tsv"
 
-# F.C & Sandhu 210220
-       echo "Running pangolin on consesnsus FASTA"
-       pangolin_d "/data/${prefix}_consensus.fa --verbose -o pangolin/global_lineage_results --outfile /data/${prefix}_pangolin_consensus.csv --panGUIlin" 2> pangolin_verbose.log
-       mv ./pangolin/global_lineage_results/global_lineage_information.csv ./pangolin/global_lineage_results/${prefix}_global_lineage_information.csv
+        # F.C & Sandhu 210220
 
-       # echo "Running pangolin on consensus FASTA"
-       # pangolin_d "/data/${prefix}_consensus.fa --panGUIlin --outdir /data/pangolin --outfile ${prefix}_pangolin_consensus.csv --verbose"
-       # echo "Organizing global lineage file information!"
-       # mv ./pangolin/global_lineage_information.csv ./pangolin/${prefix}_global_lineage_information.csv
-       # rm -rf ./pangolin/logs
+        if [ "$installandrunpangolin" = "1" ]
+        then
+            ###############################################################################
+            ################### Run lineage calls on consensus FASTA ######################
+            ###############################################################################
+            pangolin_d "${prefix}_consensus.fa --verbose --outfile ${prefix}_pangolin_consensus.csv" >> pangolin_verbose.log 2>&1
+        fi
     fi
 done
 
@@ -733,9 +766,13 @@ awk 'NR==FNR{a[$1]=$4;next}{$11=a[$1]}1' OFS="\t" \
     final_metrics_report.tmp \
     > final_metrics_report.tmp2
 
-awk 'NR==FNR{a[$1]=$4;next}{$12=a[$1]}1' OFS="\t" \
-    alnmetrics_summary.tmp final_metrics_report.tmp2 \
-    > final_metrics_report.tmp3
+# code deprecated 210513 due to not writing out human alignment metric
+# awk 'NR==FNR{a[$1]=$4;next}{$12=a[$1]}1' OFS="\t" \
+#     alnmetrics_summary.tmp final_metrics_report.tmp2 \
+#     > final_metrics_report.tmp3
+
+awk 'FNR==NR {a[FNR""] = $0; next } { print a[FNR""], $4 }' OFS="\t" \
+     final_metrics_report.tmp2 alnmetrics_summary.tmp > final_metrics_report.tmp3
 
 cat <(echo "Sample Total_Reads Reads_Aligned %Reads_Aligned Pct_10X_Cov" \
       "Mean_Coverage 20%Mean_Coverage 5%Mean_Coverage %Coverage_Uniformity" \
@@ -749,26 +786,52 @@ cat <(echo "Sample Total_Reads Reads_Aligned %Reads_Aligned Pct_10X_Cov" \
 xlreport_d --finmets "/data/${rundir}_final_metrics_report.txt"
 mv metrics_report.xlsx "${rundir}"_metrics_report.xlsx
 
-# F.C & Sandhu 210225
-echo "Summarizing lineage information from Pangolin"
-echo -e "Sample\tlineage\tprobability\tpangoLEARN_version\tstatus\tnote\ttaxon" > pangoheader.txt
-for f in *csv ; do sed 's/,/\t/g' $f | awk -v fname="${f%_pango*}" 'NR==2 {print fname, $2,$3,$4,$5,$6,$1}' > ${f%.csv}.tmp4; done
-cat pangoheader.txt *tmp4 > pangolin_lineage_report.txt
+if [ "$installandrunpangolin" = "1" ]
+then
 
-#echo "Summarize global lineage PANGOLIN"
-#echo -e "LineageName\tMost_common_countries\tDate_Range\tNumberof_taxa\tDays_sinceLast_sampling" > panglobheader.txt
-#for f in ./pangolin/global_lineage_results/*csv ; do sed 's/,/\t/g' $f | awk 'NR==2' > ${f%.csv}.tmp5; done
-#cat panglobheader.txt pangolin/global_lineage_results/*tmp5 > pangolin_globalin.tmp
-#paste pangolin_lineage.tmp pangolin_globalin.tmp > pangolin_lineage_report.txt
+# F.C & Sandhu 210225
+
+# F.C. Revision 210907
+
+echo "Summarizing lineage calls from Pangolin"
+
+pangolinConsensusCnt=$(find . -maxdepth 1 -type f -name "*consensus.csv" | wc -l)
+pangolinPassedSamples=$(grep -o -E "\,passed_qc\," *.csv | wc -l)
+pangolinFailedSamples=$(grep -o -E "\,fail\," *.csv | wc -l)
+
+echo -e "Sample\tlineage\tconflict\tambiguity_score\tscorpio_call\tscorpio_support\tscorpio_conflict\tversion\tpangolin_version\tstatus\tnote\ttaxon" >  pangoheader.txt
+
+   if [[ $pangolinConsensusCnt = $pangolinPassedSamples ]];
+   then
+       echo "There were no failed reports by Pangolin!"
+       echo "Combining into one report!"
+       for f in *csv ; do sed 's/ /_/g' $f | awk -F"," -v fname="${f%_pangolin*}" 'NR==2 {print fname,$2,$3,$4,$5,$6,$7,$8,$9,$12,"_"$13"_",$1}' OFS='\t' > ${f%.csv}.tmp4; done
+       cat pangoheader.txt *tmp4 > pangolin_lineage_report.txt
+   elif [[ ! $pangolinConsensusCnt =  $pangolinPassedSamples ]];
+   then
+       echo "Failed samples were detected by Pangolin!"
+       echo "Moving failed sample reports into directory failed_samples!"
+       mkdir failed_pangolin_samples
+       mv $(grep -lr --include=*.csv -E "\,fail\," .) ./failed_pangolin_samples
+       for f in *csv ; do sed 's/ /_/g' $f | awk -F"," -v fname="${f%_pangolin*}" 'NR==2 {print fname,$2,$3,$4,$5,$6,$7,$8,$9,$12,"_"$13"_",$1}' OFS='\t' > ${f%.csv}.tmp4; done
+       cat pangoheader.txt *tmp4 > pangolin_lineage_report.txt
+       cd ./failed_pangolin_samples/
+       for f in *.csv ; do sed 's/,/\t/g' $f | awk -v fname="${f%_pangolin*}" \
+           'NR==2 {print fname,$2,"NA","NA","NA","NA","NA",$3,$4,$7,$8,$1}' OFS="\t" >> ../pangolin_lineage_report.txt ; done
+       cd ..
+   else
+       echo "Unkown error detected!"
+   fi
+fi
 
 echo "Summarizing Nextclade results"
 for g in *tsv
  do
-     head -n1 $g > nextclad_header.txt
+     head -n1 $g > nextclade_header.txt
      awk -v fname="${g%_R1*}" 'NR==2 {print fname, $0}' $g > ${g%.tsv}.tmp5
 done
 
-cat ./nextclad_header.txt *tmp5 > nextclade_Clade_report.txt
+cat ./nextclade_header.txt *tmp5 > nextclade_Clade_report.txt
 
 # Clean up tmp files and organize output
 
@@ -791,9 +854,15 @@ mv ./*.txt tmp/
 mv ./tmp/"${coremaster}" ./
 mv ./*.p* plots/
 mv ./*.ba* bam/
-mv ./tmp/pangolin_lineage_report.txt ./
 mv ./tmp/nextclade_Clade_report.txt ./
+find ./tmp -type f -name "pangolin_lineage_report.txt" -exec mv {} ./ \;
 mv *_report.txt metrics/
+
+if [ "$installandrunpangolin" = "1" ]
+then
+    mv *.csv pangolin_output
+    mv ./metrics/pangolin_lineage_report.txt ./
+fi
 
 if [ ! "$metrics" = "1" ]
 then
@@ -802,11 +871,9 @@ then
     mv ./*.idx vcf
     mv *.bdg metrics
     mv *.tsv nextclade
-    mv *.csv pangolin
     mv *consensus.fa consensus
     mv *.vcf.gz* vcf
     mv ./metrics/nextclade_Clade_report.txt ./
-    mv ./metrics/pangolin_lineage_report.txt ./
 fi
 
 echo "Printing all Tool versions for Swift NGS analysis SARS-CoV-2"
@@ -815,22 +882,20 @@ echo "Printing all Tool versions for Swift NGS analysis SARS-CoV-2"
         echo -e "bedtools version information: "
         bedtools_d --version
         echo -e "bwa version information: "
-        docker run -it --rm -e LOCAL_USER_ID=$(id -u $USER) -v ${PWD}:/data swiftbiosci/sarscov2analysis:latest bwa | grep -E 'Version'
+        docker run -t --rm -e LOCAL_USER_ID=$(id -u $USER) swiftbiosci/sarscov2analysis:latest bwa | grep -E 'Version'
         echo -e "Plotcov version information: 3.0.0 "
         echo -e "fastqc version information: "
         fastqc_d --version
         echo -e "gatk version information: "
-        docker run --rm -e LOCAL_USER_ID=$(id -u $USER) -v ${PWD}:/data swiftbiosci/sarscov2analysis:latest gatk --version | grep -E 'The'
+        docker run --rm -e LOCAL_USER_ID=$(id -u $USER) swiftbiosci/sarscov2analysis:latest gatk --version | grep -E 'The'
         echo -e "picard version information: "
-        docker run -it --rm -e LOCAL_USER_ID=$(id -u $USER) -v ${PWD}:/data swiftbiosci/sarscov2analysis:latest unzip -p /usr/local/src/picard/picard.jar META-INF/MANIFEST.MF
+        docker run -t --rm -e LOCAL_USER_ID=$(id -u $USER) swiftbiosci/sarscov2analysis:latest unzip -p /usr/local/src/picard/picard.jar META-INF/MANIFEST.MF
         echo -e "primerclip version information:"
         primerclip_d -h
-        echo -e "Nextclade version information:"
-        nextclade_d --version
         echo -e "samtools version information: "
         samtools_d --version
         echo -e "seqtk version information: "
-        docker run -it --rm -e LOCAL_USER_ID=$(id -u $USER) -v ${PWD}:/data swiftbiosci/sarscov2analysis:latest seqtk | grep -E 'Version'
+        docker run -t --rm -e LOCAL_USER_ID=$(id -u $USER) swiftbiosci/sarscov2analysis:latest seqtk | grep -E 'Version'
         echo -e "trimmomatic version information:"
         trimmomatic_d -version
         echo -e "xlreport version information: 3.0.0"
@@ -838,8 +903,12 @@ echo "Printing all Tool versions for Swift NGS analysis SARS-CoV-2"
         lofreq_d version
         echo -e "nextclade version information:"
         nextclade_d --version
+
+if [ "$installandrunpangolin" = "1" ]
+then
         echo -e "Pangolin version information:"
-        pangolin_d -v ; pangolin_d -pv
+        pangolin_d -v ; pangolin_d -pv; pangolin_d -dv
+fi
 
 echo "analysis workflow finished."
 echo "Please check out the new plots (.pdf files) and the excel report file (metrics_report.xlsx)"
