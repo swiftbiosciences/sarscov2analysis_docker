@@ -796,16 +796,16 @@ then
 echo "Summarizing lineage calls from Pangolin"
 
 pangolinConsensusCnt=$(find . -maxdepth 1 -type f -name "*consensus.csv" | wc -l)
-pangolinPassedSamples=$(grep -o -E "\,passed_qc\," *.csv | wc -l)
+pangolinPassedSamples=$(grep -o -E "\,pass\," *.csv | wc -l)
 pangolinFailedSamples=$(grep -o -E "\,fail\," *.csv | wc -l)
 
-echo -e "Sample\tlineage\tconflict\tambiguity_score\tscorpio_call\tscorpio_support\tscorpio_conflict\tversion\tpangolin_version\tstatus\tnote\ttaxon" >  pangoheader.txt
+echo -e "Sample\tlineage\tconflict\tambiguity_score\tscorpio_call\tscorpio_support\tscorpio_conflict\tscorpio_notes\tversion\tpangolin_version\tqc_status\tqc_notes\ttaxon" >  pangoheader.txt
 
    if [[ $pangolinConsensusCnt = $pangolinPassedSamples ]];
    then
        echo "There were no failed reports by Pangolin!"
        echo "Combining into one report!"
-       for f in *csv ; do sed 's/ /_/g' $f | awk -F"," -v fname="${f%_pangolin*}" 'NR==2 {print fname,$2,$3,$4,$5,$6,$7,$8,$9,$12,"_"$13"_",$1}' OFS='\t' > ${f%.csv}.tmp4; done
+       for f in *csv ; do sed 's/ /_/g' $f | awk -F"," -v fname="${f%_pangolin*}" 'NR==2 {print fname,$2,$3,$4,$5,$6,$7,$8,$9,$10,$14,$15,$1}' OFS='\t' > ${f%.csv}.tmp4; done
        cat pangoheader.txt *tmp4 > pangolin_lineage_report.txt
    elif [[ ! $pangolinConsensusCnt =  $pangolinPassedSamples ]];
    then
@@ -813,11 +813,11 @@ echo -e "Sample\tlineage\tconflict\tambiguity_score\tscorpio_call\tscorpio_suppo
        echo "Moving failed sample reports into directory failed_samples!"
        mkdir failed_pangolin_samples
        mv $(grep -lr --include=*.csv -E "\,fail\," .) ./failed_pangolin_samples
-       for f in *csv ; do sed 's/ /_/g' $f | awk -F"," -v fname="${f%_pangolin*}" 'NR==2 {print fname,$2,$3,$4,$5,$6,$7,$8,$9,$12,"_"$13"_",$1}' OFS='\t' > ${f%.csv}.tmp4; done
+       for f in *csv ; do sed 's/ /_/g' $f | awk -F"," -v fname="${f%_pangolin*}" 'NR==2 {print fname,$2,$3,$4,$5,$6,$7,$8,$9,$10,$14,$15,$1}' OFS='\t' > ${f%.csv}.tmp4; done
        cat pangoheader.txt *tmp4 > pangolin_lineage_report.txt
        cd ./failed_pangolin_samples/
        for f in *.csv ; do sed 's/,/\t/g' $f | awk -v fname="${f%_pangolin*}" \
-           'NR==2 {print fname,$2,"NA","NA","NA","NA","NA",$3,$4,$7,$8,$1}' OFS="\t" >> ../pangolin_lineage_report.txt ; done
+           'NR==2 {print fname,$2,"NA","NA","NA","NA","NA","NA",$9,$10,$11,$12,$1}' OFS="\t" >> ../pangolin_lineage_report.txt ; done
        cd ..
    else
        echo "Unkown error detected!"
@@ -907,7 +907,7 @@ echo "Printing all Tool versions for Swift NGS analysis SARS-CoV-2"
 if [ "$installandrunpangolin" = "1" ]
 then
         echo -e "Pangolin version information:"
-        pangolin_d -v ; pangolin_d -pv; pangolin_d -dv
+        pangolin_d -v ; pangolin_d -pv
 fi
 
 echo "analysis workflow finished."
