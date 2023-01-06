@@ -63,8 +63,9 @@ while getopts ":mvodsua" opt; do
       ;;
     u)
       installandrunpangolin="1"
+      installandrunnextclade="1"
       metrics="0"
-      echo "Pipeline will include installing latest version of Pangolin during lineage calling"
+      echo "Pipeline will include installing latest version of Pangolin and Nextclade during lineage calling"
       ;;
     \?)
       usage
@@ -120,11 +121,17 @@ lofreq_d() {
     swiftbiosci/sarscov2analysis:latest lofreq "$@"
 
 }
-nextclade_d()
-{
+getnextcladesrc_d() {
     docker run --rm -e LOCAL_USER_ID=$(id -u $USER) \
-        -v ${PWD}:/data swiftbiosci/sarscov2analysis:latest \
-        nclade "$@"
+    -v ${PWD}:/data swiftbiosci/sarscov2analysis:latest \
+    bash -c "source /usr/local/src/dot_config/docker_user_bashrc && \
+    conda create -n nextclade -c bioconda nextclade"
+}
+nextclade_d() {
+    docker run --rm -e LOCAL_USER_ID=$(id -u $USER) \
+    -v ${PWD}:/data swiftbiosci/sarscov2analysis:latest \
+    bash -c "source /usr/local/src/dot_config/docker_user_bashrc && \
+    conda activate nextclade && nextclade ""$@"" "
 }
 picard_d() {
     docker run --rm -e LOCAL_USER_ID=$(id -u $USER) \
@@ -310,6 +317,15 @@ then
     installconda_d
     getpangolinsrc_d
     ipangolinupdatecheck_d
+fi
+
+if [ "$installandrunnextclade" = "1" ]
+then
+    ###############################################################################
+    # Install latest version of Nextclade to prepare envrionment for clade calls  #
+    ###############################################################################
+    getnextcladesrc_d
+    nextclade_d "dataset get --name sars-cov-2 --output-dir /data/nextclade_dataset"
 fi
 
 for f in *_R1_001.fastq.gz
@@ -701,8 +717,7 @@ do
             > "${prefix}"_consensus.fa
 
         echo "Running nextclade on consensus FASTA"
-        nextclade_d --input-fasta "/data/${prefix}_consensus.fa" \
-            --output-tsv "/data/${prefix}_nextclade_results.tsv"
+        nextclade_d "run -D /data/nextclade_dataset /data/${prefix}_consensus.fa --output-tsv /data/${prefix}_nextclade_results.tsv"
 
         # F.C & Sandhu 210220
 
@@ -901,8 +916,12 @@ echo "Printing all Tool versions for Swift NGS analysis SARS-CoV-2"
         echo -e "xlreport version information: 3.0.0"
         echo -e "lofreq version information:"
         lofreq_d version
-        echo -e "nextclade version information:"
+
+if [ "$installandrunnextclade" = "1" ]
+then
+        echo -e "Nextclade version information:"
         nextclade_d --version
+fi
 
 if [ "$installandrunpangolin" = "1" ]
 then
